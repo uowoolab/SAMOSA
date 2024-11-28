@@ -1,16 +1,26 @@
-from ccdc.io import EntryReader
+from __future__ import annotations
+
 import os
 
+from ccdc.molecule import Molecule, Atom
+from ccdc.io import EntryReader
 
-def get_rAON_atomlabels(rAON_old):
+
+def get_rAON_atomlabels(rAON_old: dict[Atom, float]) -> dict[str, float]:
     """
-    Creating a dictionary of rAON, where each value corresponds to atom
-    label instead of an atom object
-    
+    Convert previous dictionary of rAON keys from Atom object to Atom Labels (string)
+    found in CIF file.
+
     Parameters:
-        rAON_old (dict): dictionary atom: oxidation contribution for all atoms in the MOF.
+        rAON_old (dict[ccdc.molecule.Atom, float]): dictionary with Atom object as keys
+                                                 and their oxidation state contribution
+                                                 as values for all (including redundant)
+                                                 Atom objects.
     Returns:
-        rAON_atomlabels (dict): dictionary atom label: oxidation contribution.
+        rAON_atomlabels (dict[str, float]): dictionary with Atom Label strings as keys
+                                                and their oxidation state contribution
+                                                as values for all (including redundant)
+                                                Atom objects.
     """
     rAON_atomlabels = {}
     for key, value in rAON_old.items():
@@ -19,21 +29,31 @@ def get_rAON_atomlabels(rAON_old):
     return rAON_atomlabels
 
 
-def remove_free_solvent(molecule, rAON_atomlabels):  # and counterions
+def remove_free_solvent(
+    molecule: Molecule, rAON_atomlabels: dict[str, float]
+) -> tuple[
+    Molecule, list[str], list[str], dict[str, list | int | str]
+]:  # and counterions
     """
     Function cleans the molecule from free solvent and counterions.
     The solvent is considered free if the initial fragment of a molecule
-    object doesn't contain a metal and is netral.
+    object doesn't contain a metal and is neutral.
     Counterions can contain metals, don't have polymeric bonds compared to MOF structure.
 
     Parameters:
-        molecule (ccdc.molecule.Molecule): molecule object of the MOF
-        rAON_atomlabels (dict): dictionary atom label: oxidation contribution. Technically contains formal charges of individual atoms.
-    Returns:
-        structure (ccdc.molecule.Molecule): copy of MOF without free solvent
-        free_solvents (list of atom labels): list of atoms in free solvent
-        counterions (list of atom labels): list of atoms in counterions
-        statistics_output (dict): collecting statistics for output csv 
+        molecule (ccdc.molecule.Molecule): molecule object.
+        rAON_atomlabels (dict[str, float]): dictionary with Atom Label strings as keys
+                                            and their oxidation state contribution/
+                                            formal charge as values for all
+                                            (including redundant) Atom objects.
+
+     Returns:
+        structure (ccdc.molecule.Molecule): copy of structure without free solvent.
+        free_solvents (list of atom labels): list of free solvent atoms' labels.
+        counterions (list of atom labels): list of non-coordinating counterion
+                                           atoms' labels.
+        statistics_output (dict[str, list | int | str]): collects statistics for
+                                                         output csv.
     """
     structure = molecule.copy()
 
@@ -156,16 +176,20 @@ def remove_free_solvent(molecule, rAON_atomlabels):  # and counterions
     return structure, free_solvents, counterions, statistics_output
 
 
-def get_component_charge(rAON, component):
+def get_component_charge(rAON: dict[str, float], component: Molecule) -> int | float:
     """
-    Takes out the charge of the individual atoms by searching for their
+    Extracts the charge of the individual atoms in a components by searching for their
     labels in the rAON dictionary.
 
     Parameters:
-        rAON (dict): dictionary atom label: oxidation contribution.
-        component (ccdc.molecule.Molecule): disconnected component of the main molecule object. Technicaly a ligand.
+        rAON (dict[str, float]): dictionary with Atom Label strings as keys
+                                 and their oxidation state contribution/formal charge
+                                 as values for all (including redundant) Atom objects.
+        component (ccdc.molecule.Molecule): disconnected component of the main
+                                            molecule object.
+
     Returns:
-        charge (int or float): charge of the component.
+        charge (int | float): charge of the component.
     """
     charge = 0
     for atom in component.atoms:
@@ -174,14 +198,17 @@ def get_component_charge(rAON, component):
         charge += charge_unit
     return charge
 
-def get_refcode(file):
-    """Gets the CSD entry refcode by searching the CCDC database. Works with filenames type AAAAAA.cif
+
+def get_refcode(file: str) -> str:
+    """
+    Gets the CSD entry refcode by searching the CCDC database. Works with filenames type AAAAAA.cif
     and AAAAA_xxx.cif
 
     Parameters:
-        file (str): filename *.cif
+        file (str): filename in the format '*.cif'.
+
     Returns:
-        ref_code (str): refcode identifier of the mof in CCDC
+        ref_code (str): refcode identifier of the structure in CCDC (if available).
     """
 
     ref_code = file.replace(".cif", "")
@@ -193,15 +220,18 @@ def get_refcode(file):
         return ref_code
     return ref_code
 
-def check_entry(file):
+
+def check_entry(file: str) -> bool | str:
     """
-    Checks the name of the MOF in the CSD entry if it contains something
-    related to -oxo-
-    
+    Checks the name of the MOF in the CSD entry if it contains something related to -oxo-.
+
     Parameters:
-        file (str): filename in format *.cif.
-    Returns: 
-        entry_oxo (bool or str): True if the oxo is present in the entry, False if not. Returns 'Invalid' if failed to access CCDC using the refcode
+        file (str): filename in the format '*.cif'.
+
+    Returns:
+        entry_oxo (bool | str): True if the oxo is present in the entry, False if not.
+                                Returns 'Invalid' if failed to access CCDC using the
+                                refcode.
     """
     entry_oxo = False
 
@@ -237,25 +267,35 @@ def check_entry(file):
                 if oxo_name in name:
                     entry_oxo = True
     except:
-        #if can't access entry removes all oxo
-        print('WARNING: refcode is not found in CCDC - all oxygen atoms suspected of being water will be removed if --keep_oxo was not passed as argument. This can be caused by inconsistend filename (refcode is extracted from filename) or absence of your MOF in CCDC. Rename your file to AAAAAA.cif or AAAAAA_xxx.cif and try again.')
-        entry_oxo = 'FAILED REFCODE'
-    
+        # if can't access entry removes all oxo
+        print(
+            "WARNING: refcode is not found in CCDC - all oxygen atoms suspected of being water will be removed if --keep_oxo was not passed as argument. This can be caused by inconsistent filename (refcode is extracted from filename) or absence of your MOF in CCDC. Rename your file to AAAAAA.cif or AAAAAA_xxx.cif and try again."
+        )
+        entry_oxo = "FAILED REFCODE"
+
     return entry_oxo
-    
-def get_oxo(molecule, file, keep_oxo):
+
+
+def get_oxo(
+    molecule: Molecule, file: str, keep_oxo: bool
+) -> tuple[list[str], dict[str, list | int | str]]:
     """
     Getting the terminal oxygens from the molecule that are supposed to
     be removed as water. Filters out the real oxo and flags if there are
     any terminal oxygens present.
 
-    Parameters: 
-        molecule (ccdc.molecule.Molecule): molecule object of the MOF.
-        file (str): filename in format *.cif.
-        keep_oxo (bool): argument, if set all the terminal oxygens are not removed.
+    Parameters:
+        molecule (ccdc.molecule.Molecule): molecule object.
+        file (str): filename in the format '*.cif'.
+        keep_oxo (bool): optional argument that if set, all the terminal oxygens
+                         are not removed.
+
     Returns:
-        terminal_oxo (list of atom labels): list of labels of oxygen atoms considered water without hydrogens for removal.
-        statistics_output (dict): collecting stats for output
+        terminal_oxo (list of atom labels): list of atom labels of oxygen atoms
+                                            considered water without hydrogens
+                                            for removal.
+        statistics_output (dict[str, list | int | str]): collects statistics for
+                                                         output csv.
     """
 
     terminal_oxo_flag = False
@@ -266,7 +306,7 @@ def get_oxo(molecule, file, keep_oxo):
     terminal_oxo = []
 
     oxo_present = check_entry(file)
-        
+
     possible_oxo = []
     corresponding_metals = []
     # writes to list of possible oxo atoms and the metals that correspond to them
@@ -285,17 +325,17 @@ def get_oxo(molecule, file, keep_oxo):
                         if probable_metal[0].atomic_symbol == ("Zr" or "U"):
                             oxo_OH = True
 
-    """If the entry says that the oxos are present:
+    """If the entry says that the oxo-ligands are present:
     The metals list is checked for the presence of most probable ones.
-    If the most probable ones are present, the oxos on them are kept and all
+    If the most probable ones are present, the oxo-ligands on them are kept and all
     the other ones are removed.
-    If there are no most probable metals, all the oxos are kept.
+    If there are no most probable metals, all the oxo-ligands are kept.
 
-    If the entry says that the oxos are not present:
-    All the oxos are removed
+    If the entry says that the oxo-ligands are not present:
+    All the oxo-ligands are removed
     
     If refcode is not found in CCDC:
-    All oxos are removed"""
+    All oxo-ligands are removed"""
 
     # skipping further steps if no oxo
     if len(possible_oxo) != 0:
@@ -319,7 +359,7 @@ def get_oxo(molecule, file, keep_oxo):
 
         if len(terminal_oxo) > 0:
             terminal_oxo_flag = True
-    
+
     if keep_oxo:
         terminal_oxo = []
 
@@ -333,14 +373,15 @@ def get_oxo(molecule, file, keep_oxo):
     return terminal_oxo, statistics_output
 
 
-def remove_metals(work_mol):
+def remove_metals(work_mol: Molecule) -> Molecule:
     """
     Removes the metals from the molecule object by checking the atoms.
 
     Parameters:
-        work_mol (ccdc.molecule.Molecule): molecule object of the MOF.
+        work_mol (ccdc.molecule.Molecule): molecule object (full).
+
     Returns:
-        work_mol (ccdc.molecule.Molecule): molecule object of the MOF without metals.
+        work_mol (ccdc.molecule.Molecule): molecule object without metals.
     """
     for atom in work_mol.atoms:
         if atom.is_metal is True:
@@ -348,7 +389,9 @@ def remove_metals(work_mol):
     return work_mol
 
 
-def define_solvents(mol_no_metals, charges):
+def define_solvents(
+    mol_no_metals: Molecule, charges: dict[str, float]
+) -> tuple[list[str], dict[str, list | int | str]]:
     """
     Selecting initial list of bound solvents. If the fragment is not
     charged it is considered a solvent.
@@ -357,10 +400,14 @@ def define_solvents(mol_no_metals, charges):
 
     Parameters:
         mol_no_metals (ccdc.molecule.Molecule): MOF with removed metals
-        charges (dict): dictionary atom label: charge
+        charges (dict[str, float]): dictionary with Atom Label strings as keys
+                                    and their oxidation state contribution/formal charge
+                                    as values for all (including redundant) Atom objects.
+
     Returns:
-        not_charged (list): list of atom labels to remove
-        statistics_output (dict): collecting stats
+        not_charged (list[str]: list of atom labels to be removed.
+        statistics_output (dict[str, list | int | str]): collects statistics for
+                                                         output csv.
     """
     OH_removed = "."
 
@@ -395,7 +442,9 @@ def define_solvents(mol_no_metals, charges):
     return not_charged, statistics_output
 
 
-def check_solvent(solvents, binding_sites_labels, unique_sites):
+def check_solvent(
+    solvents: list[str], binding_sites_labels: list[str], unique_sites: list[Atom]
+) -> tuple[list[str], dict[str, list | int | str]]:
     """
     This function checks the solvent molecule object if they satisfy
     the conditions:
@@ -403,12 +452,15 @@ def check_solvent(solvents, binding_sites_labels, unique_sites):
     2. Bound to only one metal
 
     Parameters:
-        solvents (list): list of atom labels that might be solvents
-        binding_site_labels (list): labels of binding sites atoms
-        unique_sites (list): list of ccdc.atom.Atom: A list of unique atoms in the MOF structure that belong to the asymmetric unit.
+        solvents (list[str]): list of atom labels that might be solvents.
+        binding_site_labels (list[str]): list of binding sites' atom labels.
+        unique_sites (list[ccdc.atom.Atom]): list of unique atoms in the structure
+                                             belonging to the asymmetric unit.
+
     Returns:
-        solvents_final (list): list of checked atom labels for removal
-        statistics_output (dict): collecting stats
+        solvents_final (list[str): list of atom labels confirmed for removal.
+        statistics_output (dict[str, list | int | str]): collects statistics for
+                                                         output csv.
     """
 
     solvents_final = []
@@ -462,7 +514,7 @@ def check_solvent(solvents, binding_sites_labels, unique_sites):
             if flag_bridging is False:
                 solvents_for_output.append(solvent_labels)
 
-                # wriitng atom labels as list for solvent removal
+                # writing atom labels as list for solvent removal
                 for label in solvent_labels:
                     solvents_final.append(label)
 
@@ -496,16 +548,23 @@ def check_solvent(solvents, binding_sites_labels, unique_sites):
     return solvents_final, statistics_output
 
 
-def get_solvents_to_remove(solvent_mols, free_mols, counterion_mols, oxo_mols):
-    """Puts together an overall list of solvents to remove from the text file.
+def get_solvents_to_remove(
+    solvent_mols: list[str],
+    free_mols: list[str],
+    counterion_mols: list[str],
+    oxo_mols: list[str],
+) -> list[str]:
+    """
+    Puts together an overall list of solvents to remove from the text file.
 
     Parameters:
-        solvent_mols (list): list of atom labels of bound solvent
-        free_mols (list): list of atom labels of free solvent
-        counterion_mols (list): list of atom labels of counterions
-        oxo_mols (list): list of atom labels of terminal oxo
+        solvent_mols (list[str]): list of bound solvent atom labels.
+        free_mols (list[str]): list of free solvent atom labels.
+        counterion_mols (list[str]): list of counterions atom labels.
+        oxo_mols (list[str]): list of terminal oxo- atom labels.
+
     Returns:
-        final_solvents (list): list of atom labels for removal
+        final_solvents (list[str]): list of atom labels for removal
     """
     final_solvents = []
     final_solvents.extend(solvent_mols)
@@ -513,3 +572,4 @@ def get_solvents_to_remove(solvent_mols, free_mols, counterion_mols, oxo_mols):
     final_solvents.extend(counterion_mols)
     final_solvents.extend(oxo_mols)
     return final_solvents
+

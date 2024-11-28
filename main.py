@@ -1,19 +1,29 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
 import argparse
-import glob
 import os
 import time
+
 from multiprocessing import Pool
-import ccdc
-from ccdc import io
-from ccdc.io import CrystalWriter
 
 from modules.assign_charges import *
 from modules.cif_manipulation import *
 from modules.outputs import *
 from modules.solvent_analysis import *
 
-parser = argparse.ArgumentParser()
+code_desc = """
+Structural Activation via Metal Oxidation State Analysis.
+
+A solvent removal protocol generating activated crystal structures from experimental crystallographic information.
+Removes free solvent, counterion, and/or bound solvent molecules keeping into account the charge of removed fragments.
+
+Designed for crystal structures in the CIF file format.
+Primary intent of the method is to clean Metal-Organic Frameworks (MOFs) for computation, but it can be applied to any 3D periodic crystal structure.
+"""
+parser = argparse.ArgumentParser(
+    description=code_desc, formatter_class=argparse.RawTextHelpFormatter
+)
 parser.add_argument(
     "--files_path", default=os.getcwd(), help="specify the folder where MOFs are stored"
 )
@@ -30,7 +40,7 @@ parser.add_argument(
     "--keep_bound", action="store_true", help="if set, bound solvent is not removed"
 )
 parser.add_argument(
-    '--keep_oxo', action="store_true", help="if set, terminal oxygens are not removed"
+    "--keep_oxo", action="store_true", help="if set, terminal oxygens are not removed"
 )
 args = parser.parse_args()
 
@@ -39,7 +49,21 @@ output_dir = args.export_path
 keep_bound = args.keep_bound
 keep_oxo = args.keep_oxo
 
-def worker(file):
+
+def worker(file: str) -> dict[str, list | int | str] | None:
+    """
+    Handles the overall SAMOSA workflow including reading in the structure,
+    identify and removing solvent molecules, and outputting the final structure
+    file (CIF) and summary (csv). Separate function call for each structure/process
+    in the multiprocessing Pool.
+
+    Parameters:
+        file (str): filename in format "*.cif".
+
+     Returns:
+        output_row (dict[str, list | int | str]): collects statistics for
+                                                  output csv.
+    """
     try:
         start_time_MOF = time.time()
         print(f"Analyzing {file}...")
@@ -51,7 +75,7 @@ def worker(file):
         mol = cif.molecule
         asymmol = cif.asymmetric_unit_molecule
 
-        uniquesites = get_unique_sites(mol, asymmol) 
+        uniquesites = get_unique_sites(mol, asymmol)
         metalsites = get_metal_sites(uniquesites)
         binding_sites = get_binding_sites(
             metalsites, uniquesites
@@ -80,8 +104,8 @@ def worker(file):
             counterions,
             solvent_stats_batch1,
         ) = remove_free_solvent(mol, rAON_atomlabels)
-        
-        #if the user wants to keep bound solvent skipping further steps
+
+        # if the user wants to keep bound solvent skipping further steps
         if not keep_bound:
             # identifying the oxo molecules
             oxo_mols, solvent_stats_batch2 = get_oxo(uniquesites, file, keep_oxo)
@@ -104,15 +128,18 @@ def worker(file):
 
             # combine all the lists of items to remove
             solvents_to_remove = get_solvents_to_remove(
-                solvent_mols_checked, free_solvents, counterions, oxo_mols,
+                solvent_mols_checked,
+                free_solvents,
+                counterions,
+                oxo_mols,
             )
 
             # putting together dictionary of otput stats
             output_solvent_stats = {
-            **solvent_stats_batch1,
-            **solvent_stats_batch2,
-            **solvent_stats_batch3,
-            **solvent_stats_batch4,
+                **solvent_stats_batch1,
+                **solvent_stats_batch2,
+                **solvent_stats_batch3,
+                **solvent_stats_batch4,
             }
         else:
             solvents_to_remove = free_solvents + counterions
@@ -136,8 +163,12 @@ def worker(file):
 
         # output a csv with solvent removal stats
         output_row = output_csv(
-            output_solvent_stats, solvent_present_flag, total_solv_atoms, file,
-            removed_atoms, keep_bound
+            output_solvent_stats,
+            solvent_present_flag,
+            total_solv_atoms,
+            file,
+            removed_atoms,
+            keep_bound,
         )
 
         if not args.verbose:
@@ -146,22 +177,25 @@ def worker(file):
         print("--- %s seconds ---" % (time.time() - start_time_MOF))
 
         return output_row
-    
+
     except Exception as e:
-        print(f'ERROR >>>>> {file}')
+        print(f"ERROR >>>>> {file}")
 
 
 if __name__ == "__main__":
     start_time = time.time()
 
-    files = [os.path.join(cwd, file) for file in os.listdir(cwd) if file.endswith(".cif")]
+    files = [
+        os.path.join(cwd, file) for file in os.listdir(cwd) if file.endswith(".cif")
+    ]
 
     print(f"### {len(files)} .cif file(s) detected in {cwd} ###")
 
-    pool = Pool(processes = int(args.n_processes))
+    pool = Pool(processes=int(args.n_processes))
 
     for res in pool.imap(worker, files):
         if res is not None:
             export_res(res, keep_bound, output_dir)
 
     print("--- %s seconds ---" % (time.time() - start_time))
+

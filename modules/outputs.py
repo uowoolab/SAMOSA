@@ -1,20 +1,26 @@
+from __future__ import annotations
+
 import os
-import shutil
 import csv
+import shutil
 
 from .cif_manipulation import remove_solvents_from_file
 
 
-def command_line_output(solvent_stats, solvent_present_flag, keep_bound):
+def command_line_output(
+    solvent_stats: list[str], solvent_present_flag: bool, keep_bound: bool
+) -> None:
     """
-    Printing information to the terminal
-    
+    Prints information to the terminal.
+
     Parameters:
-        solvent_stats (list): list of solvent atom labels
-        solvent_present_flag (bool): True if solvent is present
-        keep_bound (bool): True if argument passed to argparse - doesn't remove bound solvent
+        solvent_stats (list[str]): list of solvent atom labels.
+        solvent_present_flag (bool): True if solvent is present.
+        keep_bound (bool): True if argument passed in arguments (argparse)
+                           Doesn't affect bound solvent removal itself.
+
     Returns:
-        nothing
+        None
     """
     if solvent_present_flag:
         if solvent_stats.get("free_solvent_flag"):
@@ -23,8 +29,8 @@ def command_line_output(solvent_stats, solvent_present_flag, keep_bound):
             print("-----")
             print(f"Number of molecules: {len(free_solvent)}")
             print("-----")
-        
-        #part of output only for bound solvent
+
+        # part of output only for bound solvent
         if not keep_bound:
             if solvent_stats.get("counterions_flag"):
                 counterions = solvent_stats.get("counterions_output")
@@ -45,26 +51,32 @@ def command_line_output(solvent_stats, solvent_present_flag, keep_bound):
 
 
 def output_csv(
-    solvent_stats, solvent_present_flag, total_solv_atoms, file, 
-    removed_atoms, keep_bound
-):
+    solvent_stats: list[str],
+    solvent_present_flag: bool,
+    total_solv_atoms: int,
+    file: str,
+    removed_atoms: int,
+    keep_bound: bool,
+) -> list[list | int | str]:
     """
     Forms a row for the solvent statistics that is appended to output csv.
     There are two types of rows: for all solvent removed and for only free solvent removed.
 
     Parameters:
-        solvent_stats (list): list of atom labels of solvent.
+        solvent_stats: (list[str]): list of atom labels of solvent.
         solvent_present_flag (bool): True if solvent was detected.
         total_solv_atoms (int): total number of solvent atoms.
-        file (str): filename in format *.cif.
-        removed_atoms (int): number of atoms actually removed with parcer.
-        keep_bound (bool): True if argument passed to argparse - doesn't remove bound solvent
+        file (str): filename in format "*.cif".
+        removed_atoms (int): number of atoms actually removed while parsing file.
+        keep_bound (bool): True if argument passed in arguments (argparse)
+                           Doesn't affect/change bound solvent removal itself.
+
     Returns:
-        output_row (list): formatted list of items for the csv cellss
+        output_row (list[list | int | str]): formatted list of items for the csv cells.
     """
     file = os.path.basename(file)
-    
-    #forming stats for free + bound solvent export
+
+    # forming stats for free + bound solvent export
     if keep_bound:
         # forming output row depending on presence of solvent
         if solvent_present_flag:
@@ -107,7 +119,7 @@ def output_csv(
                 ".",
                 ".",
             ]
-    #forming output for only free solvent
+    # forming output for only free solvent
     else:
         if solvent_present_flag:
             # getting items from storage dict
@@ -178,20 +190,25 @@ def output_csv(
                 oxo_OH,
             ]
 
-
     return output_row
 
-def output_cif(path, file, solvent_coordinates, cwd):
+
+def output_cif(
+    path: str, file: str, solvent_coordinates: list[list[float]], cwd: str
+) -> int:
     """
-    Outputs a new cif file without solvent if solvent was detected.
+    Outputs a new cif file without solvent atoms if solvent was detected.
 
     Parameters:
-        path (str): path to the output folder.
-        file (str): filename *.cif.
-        solvent_coordinates (list): list of lists of coordinates (x,y,z).
-        cwd (str): path to current working directory.
+        path(str): path to the output folder.
+        file (str): filename in format "*.cif".
+        solvent_coordinates (list[list[float]]): list of lists containing the 3
+                                        fractional coordinates [x, y, z] of each
+                                        atom due for removal.
+        cwd: (str): path to current working directory.
+
     Returns:
-        removed_atoms (int): number of atoms that were removed from .cif file by the parcer.
+        removed_atoms (int): number of atoms that were removed from .cif file by the parser.
     """
     output_directory = os.path.join(path, "MOFs_removed_solvent")
     if not os.path.exists(output_directory):
@@ -202,48 +219,79 @@ def output_cif(path, file, solvent_coordinates, cwd):
         lines = cif_file.readlines()
         cif_file.seek(0)
         cif_file.truncate()
-        file_content, removed_atoms = remove_solvents_from_file(lines, solvent_coordinates)
+        file_content, removed_atoms = remove_solvents_from_file(
+            lines, solvent_coordinates
+        )
         for line in file_content:
             cif_file.write(line)
         cif_file.close()
 
     return removed_atoms
 
-def export_res(res, keep_bound, output_dir):   
+
+def export_res(res: list[list | int | str], keep_bound: bool, output_dir) -> None:
     """
-    Function to process the result of the pool process.
-    Result is a row of statistics for the output csv.
+    Processes the results of the Pool to generate output csv.
+    Result is a row of information/stats for one structure to be sent to the output csv.
 
     Parameters:
-        res (list): row of statisctics output for the output csv.
+        res (list[list | int | str]): row of output information and flags for the csv.
         keep_bound (bool): True if argument passed to argparse - doesn't remove bound solvent
         output_dir (str): path to output directory
+
     Returns:
-        nothing, outputs a csv
+        None
     """
     if keep_bound:
         export_df_path = os.path.join(output_dir, "Free_solvent_removal_results.csv")
-        columns = ['CIF', 'Solvent', 'Free_solvent', 'Number_of_free_solvent_molecules',
-                            'Counterions', 'Number_of_counterions', 'Charge_removed', 
-                            'Total_atoms', 'Atoms_removed', 'Atoms_match_flag', 
-                            'Metal_counterion_flag', 'Huge_counterion_flag']
+        columns = [
+            "CIF",
+            "Solvent",
+            "Free_solvent",
+            "Number_of_free_solvent_molecules",
+            "Counterions",
+            "Number_of_counterions",
+            "Charge_removed",
+            "Total_atoms",
+            "Atoms_removed",
+            "Atoms_match_flag",
+            "Metal_counterion_flag",
+            "Huge_counterion_flag",
+        ]
     else:
         export_df_path = os.path.join(output_dir, "Solvent_removal_results.csv")
-        columns = ['CIF', 'Solvent', 'Bound_solvent', 'Number_of_bound molecules', 
-                            'Free_solvent', 'Number_of_free_solvent_molecules',
-                            'Counterions', 'Number_of_counterions', 'Terminal_oxo',
-                            'Number_of_terminal_oxo', 'Charge_removed', 'Total_atoms',
-                            'Atoms_removed', 'Atoms_match_flag', 'Flag_double',
-                            'Flag_aromatic', 'Metal_counterion_flag', 'Terminal_oxo_flag',
-                            'Entry_terminal_oxo', 'Huge_counterion_flag', 'OH_removed',
-                            'Oxo_OH']
-        
+        columns = [
+            "CIF",
+            "Solvent",
+            "Bound_solvent",
+            "Number_of_bound molecules",
+            "Free_solvent",
+            "Number_of_free_solvent_molecules",
+            "Counterions",
+            "Number_of_counterions",
+            "Terminal_oxo",
+            "Number_of_terminal_oxo",
+            "Charge_removed",
+            "Total_atoms",
+            "Atoms_removed",
+            "Atoms_match_flag",
+            "Flag_double",
+            "Flag_aromatic",
+            "Metal_counterion_flag",
+            "Terminal_oxo_flag",
+            "Entry_terminal_oxo",
+            "Huge_counterion_flag",
+            "OH_removed",
+            "Oxo_OH",
+        ]
+
     if os.path.exists(export_df_path):
-        with open(export_df_path, 'a',  newline='') as file_obj:
+        with open(export_df_path, "a", newline="") as file_obj:
             writerObj = csv.writer(file_obj)
-            writerObj.writerow(res)        
+            writerObj.writerow(res)
     else:
-        with open(export_df_path, 'w',  newline='') as fileObj:
+        with open(export_df_path, "w", newline="") as fileObj:
             writerObj = csv.writer(fileObj)
             writerObj.writerow(columns)
             writerObj.writerow(res)
+

@@ -1,15 +1,21 @@
-from ccdc import crystal, io
+from __future__ import annotations
+
+import ccdc
+from ccdc import io
+from ccdc.crystal import Crystal
 
 
-def readentry(input_cif):
+def readentry(input_cif: str) -> Crystal:
     """
-    Reads a CIF file containing molecular structure data and converts it to a standard atom labeling convention using the CCDC.Crystal module.
+    Reads a CIF file containing molecular structure data and converts it to a
+    standard atom labeling convention using the ccdc.crystal module.
 
-        Parameters:
-            input_cif (str): The filename of the CIF file containing the molecular structure data.
-            
-        Returns:
-            newcif (CCDC.Crystal object): A CCDC.Crystal object containing the molecular structure data in the standard atom labeling convention.
+    Parameters:
+        input_cif (str): filename (.CIF) containing crystal structure data.
+
+    Returns:
+        newcif (ccdc.crystal.Crystal): Crystal object containing structural data
+                                       in the standard atom labeling convention.
     """
 
     # read in the cif to a crystal object
@@ -73,24 +79,28 @@ def readentry(input_cif):
         for i in lines:
             newstring += i
         # read into new crystal object and assign bonds
-        newcif = crystal.Crystal.from_string(newstring, format="cif")
+        newcif = Crystal.from_string(newstring, format="cif")
         newcif.assign_bonds()
         file.close()
     return newcif
 
 
-def get_coordinates(molecule, solvents):
+def get_coordinates(
+    molecule: ccdc.molecule.Molecule, solvents: list[str]
+) -> list[list[float]]:
     """
-    Gets the coordinate lists of the individual atoms for removal
-    Coordinates are trimmed to 5 decimal places
+    Gets the [x,y,z] coordinate lists of the individual atoms due to be removed.
 
     Parameters:
-        molecule (ccdc.molecule.Molecule): full MOF structure
-        solvents (list): list of atom labels of solvents for removal
-    Returns:
-        atoms_coordicates (list): list of lists of 3 coordinates of each atom for removal. x, y, z 
+        molecule (ccdc.molecule.Molecule): Molecule object representing full structure.
+        solvents (list[str]): list of atom labels of solvents to be removed.
 
-    Returns: a list of lits of three atom coordinates as str with 5 decimal places"""
+    Returns:
+        atoms_coordinates (list[list[float]]): list of lists containing the 3 fractional
+                                               coordinates [x, y, z] of each atom due for
+                                               removal.
+
+    """
     atoms_coordinates = []
     for atom in molecule.atoms:
         if atom.label in solvents:
@@ -120,17 +130,24 @@ def get_coordinates(molecule, solvents):
             atoms_coordinates.append(coord_unit)
     return atoms_coordinates
 
-def remove_solvents_from_file(lines, coordinates):
+
+def remove_solvents_from_file(
+    lines: list[str], coordinates: list[list[float]]
+) -> tuple[list[str], int]:
     """
-    Goes through the cif file and removes the lines that correspond
-    to the atoms that shoulb be removed. Works as a text parcer by comparing strings
+    Parses CIF file and removes lines corresponding to the atoms identified for
+    removal through string matching.
 
     Parameters:
-        lines (list): list of strings that correspond to individual lines of the cif file
-        coordinates (list): list of 3 items lists (x,y,z coordinates), 5 decimal points
+        lines (list[str]): list of individual line strings from the CIF file.
+        coordinates (list[list[float]]): list of lists containing the 3 fractional
+                                        coordinates [x, y, z] of each atom due
+                                        for removal.
+
     Returns:
-        lines (list): edited lines without strings that correspond to removed atoms
-        atom_count (int): number of atoms that were removed from file
+        lines (list[str]): edited list of individual CIF line strings with atoms
+                          at the specific coordinates removed.
+        atom_count (int): total number of atoms removed from the CIF file.
     """
     atom_labels = []
     atom_count = 0
@@ -213,3 +230,4 @@ def remove_solvents_from_file(lines, coordinates):
             if atom in content_fixed:
                 lines.remove(line)
     return lines, atom_count
+
