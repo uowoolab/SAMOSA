@@ -5,6 +5,8 @@ import os
 from ccdc.molecule import Molecule, Atom
 from ccdc.io import EntryReader
 
+from collections import defaultdict
+
 from multiprocessing import current_process as cpr
 
 from .log_utils import get_logger
@@ -275,9 +277,6 @@ def check_entry(file: str) -> bool | str:
             "refcode %s not found in CCDC. All terminal-O will be removed if --keep_oxo is not specified. Check your cif file naming."
             % ref_code
         )
-        # print(
-        #     "WARNING: refcode is not found in CCDC - all oxygen atoms suspected of being water will be removed if --keep_oxo was not passed as argument. This can be caused by inconsistent filename (refcode is extracted from filename) or absence of your MOF in CCDC. Rename your file to AAAAAA.cif or AAAAAA_xxx.cif and try again."
-        # )
         entry_oxo = "FAILED REFCODE"
 
     return entry_oxo
@@ -450,7 +449,10 @@ def define_solvents(
 
 
 def check_solvent(
-    solvents: list[str], binding_sites_labels: list[str], unique_sites: list[Atom]
+    solvents: list[str],
+    binding_pairs: dict[Atom, list[Atom]],
+    unique_sites: list[Atom],
+    max_denticity: int,
 ) -> tuple[list[str], dict[str, list | int | str]]:
     """
     This function checks the solvent molecule object if they satisfy
@@ -460,9 +462,13 @@ def check_solvent(
 
     Parameters:
         solvents (list[str]): list of atom labels that might be solvents.
-        binding_site_labels (list[str]): list of binding sites' atom labels.
+        binding_pairs (dict[ccdc.molecule.Atom, list[ccdc.molecule.Atom]]): dictionary
+                                with each ligand binding site Atom object as keys and
+                                a list of the associated bound metal atoms as values.
         unique_sites (list[ccdc.atom.Atom]): list of unique atoms in the structure
                                              belonging to the asymmetric unit.
+        max_denticity (int): value of maximum denticity allowed and still
+                             considered as removable/solvent.
 
     Returns:
         solvents_final (list[str): list of atom labels confirmed for removal.
@@ -479,22 +485,40 @@ def check_solvent(
     flag_double = "."
     bound_solvent_flag = False
 
-    # writing a list of bridging oxo to not remove bridging neutral_units
-    bridging_oxo = []
+    # rewriting binding pairs as labels
+    binding_sites_labels = [site.label for site, metals in binding_pairs.items()]
+    # converting binding pairs from Atom objects to labels
+    # positions are added to the metal labels to distinguish between periodic
+    # images of the same site
+    # (needed when denticity > 1 & a linker bridges metals with the same label)
+
+    # binding_pair_labels = {
+    #     site.label: [m.label + str(m.coordinates[:3]) for m in metals]
+    #     for site, metals in binding_pairs.items()
+    # }
+
+    # dict of binding site atom labels paired with the specific image of their
+    # neighboring metal atoms (necessary to distinguish periodic images of MX) 
+    binding_pair_labels = defaultdict(list)
+    # writing a list of atoms bridging metals to not remove bridging neutral_units
+    bridging = []
     for atom in unique_sites:
-        if atom.atomic_symbol == "O":
+        if not atom.is_metal:
             neighbours = atom.neighbours
             n_count = 0
             for unit in neighbours:
                 if unit.is_metal is True:
                     n_count += 1
+                    binding_pair_labels[atom.label].append(
+                        unit.label + str(unit.coordinates[:3])
+                    )
             if n_count > 1:
-                bridging_oxo.append(atom.label)
+                bridging.append(atom.label)
 
     for solvent in solvents:
         solvent_labels = []
-        # checking if there are carbonyls present and if they are -
-        # skipping the carbonyls
+
+        # custom check for carbonyls (skipped)
         if len(solvent.atoms) == 2:
             symbols = [atom.atomic_symbol for atom in solvent.atoms]
             if "C" in symbols and "O" in symbols:
@@ -506,26 +530,28 @@ def check_solvent(
             label = atoms_list[i].label
             solvent_labels.append(label)
             solvent_type_label[label] = atoms_list[i]
-        # checking if the solvent is bound to only one metal
-        count = 0
-        for i in range(len(solvent_labels)):
-            count += binding_sites_labels.count(solvent_labels[i])
 
-        if count == 1:
+        # determining which metal sites bind the solvent atoms
+        uniq_metal_bound = []
+        for i in range(len(solvent_labels)):
+            if solvent_labels[i] in binding_sites_labels:
+                uniq_metal_bound.extend(binding_pair_labels[solvent_labels[i]])
+  
+        # checking denticity & bridging
+        if (len(uniq_metal_bound) <= max_denticity) & (len(set(uniq_metal_bound)) == 1):
             # checking for bridging stuff
             flag_bridging = False
             for atom in solvent_labels:
-                if atom in bridging_oxo:
+                if atom in bridging:
                     flag_bridging = True
 
             if flag_bridging is False:
                 solvents_for_output.append(solvent_labels)
-
                 # writing atom labels as list for solvent removal
                 for label in solvent_labels:
                     solvents_final.append(label)
 
-        # getting flags for the outputs
+    # getting flags for the outputs
     for solvent in solvents_for_output:
         for atom in solvent:
             tmp_sites_labels = set(binding_sites_labels)

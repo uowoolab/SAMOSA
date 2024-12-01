@@ -10,6 +10,7 @@ import mendeleev
 from ccdc.molecule import Atom, Molecule
 from ccdc.descriptors import MolecularDescriptors
 
+from collections import defaultdict
 from multiprocessing import current_process as cpr
 
 from .log_utils import get_logger
@@ -89,7 +90,9 @@ def get_metal_sites(sites: list[Atom]) -> list[Atom]:
     return metalsites
 
 
-def get_binding_sites(metalsites: list[Atom], uniquesites: list[Atom]) -> list[Atom]:
+def get_binding_sites(
+    metalsites: list[Atom], uniquesites: list[Atom]
+) -> tuple[list[Atom], dict[Atom, list[Atom]]]:
     """
     Get the binding sites in a MOF structure, given the list of unique metal atoms
     and all unique atoms in the MOF.
@@ -101,14 +104,19 @@ def get_binding_sites(metalsites: list[Atom], uniquesites: list[Atom]) -> list[A
     Returns:
         binding_sites (list[ccdc.molecule.Atom]): list of binding sites connecting metal
                                                   atoms and ligands.
+        binding_pairs (dict[ccdc.molecule.Atom, list[ccdc.molecule.Atom]]): dictionary
+                                with each ligand binding site Atom object as keys and
+                                a list of the associated bound metal atoms as values.
     """
     binding_sites = []
+    binding_pairs = defaultdict(list)
     for metal in metalsites:
         for ligand in metal.neighbours:
             for site in uniquesites:
                 if ligand.label == site.label:
                     binding_sites.append(site)
-    return binding_sites
+                    binding_pairs[site].append(metal)
+    return binding_sites, binding_pairs
 
 
 def ringVBOs(mole: Molecule) -> dict[int, int]:
@@ -190,7 +198,7 @@ def ringVBOs(mole: Molecule) -> dict[int, int]:
                 offVBO += offdVBO[offatom]
             elif bond.bond_type == "Aromatic":
                 offVBO += 0
-                # print("impossible Aromatic bond")
+                get_logger(cpr().name).warning("impossible aromatic bond detected")
         # cap with appropriate element for VBO
         if offVBO == 1:
             offatom.atomic_symbol = "H"
@@ -205,7 +213,9 @@ def ringVBOs(mole: Molecule) -> dict[int, int]:
         elif offVBO == 6:
             offatom.atomic_symbol = "S"
         elif offVBO > 6:
-            print("no, that's too many")
+            get_logger(cpr().name).warning(
+                "issue detected in valence bond order calculations (capping)"
+            )
     # for each cyclic system, reassign bonds, kekulize, and get VBO
     # the bond and atom pruning we did above ensures that fused cycles
     # will be treated as a single system
@@ -237,7 +247,6 @@ def ringVBOs(mole: Molecule) -> dict[int, int]:
                         rVBO += rdVBO[ratom]
                     elif rbond.bond_type == "Aromatic":
                         rVBO += 0
-                        # print("impossible Aromatic bond")
                         get_logger(cpr().name).warning(
                             "impossible aromatic bond detected"
                         )

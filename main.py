@@ -39,6 +39,12 @@ parser.add_argument(
     "--n_processes", default=4, help="specify number of parallel processes"
 )
 parser.add_argument(
+    "--removable_denticity",
+    type=int,
+    default=1,
+    help="maximum value of ligand denticity that will still be considered for removal (default: 1)",
+)
+parser.add_argument(
     "-v",
     "--verbose",
     action="store_true",
@@ -86,18 +92,21 @@ def worker(file: str, queue: Queue) -> dict[str, list | int | str] | None:
         worker_logger.info("analyzing %s ..." % os.path.basename(file))
         input_cif = file
 
+        worker_logger.debug("Reading structure file ...")
         # read in the .cif, extract the underlying molecule,
         # identify the unique sites, metal sites, binding sites
         cif = readentry(input_cif)
         mol = cif.molecule
         asymmol = cif.asymmetric_unit_molecule
 
+        worker_logger.debug("Analyzing sites ...")
         uniquesites = get_unique_sites(mol, asymmol)
         metalsites = get_metal_sites(uniquesites)
-        binding_sites = get_binding_sites(
+        binding_sites, binding_pairs = get_binding_sites(
             metalsites, uniquesites
         )  # outputs list of atoms bound to metals
 
+        worker_logger.debug("Calculating oxidation state contributions ...")
         # Now get the localized oxidation state contribution of each atom
         # need delocalized bond contributions
         dVBO = delocalisedLBO(mol)
@@ -113,6 +122,7 @@ def worker(file: str, queue: Queue) -> dict[str, list | int | str] | None:
         # redoing the rAON dictionary to have atom labels instead of atoms
         rAON_atomlabels = get_rAON_atomlabels(rAON)
 
+        worker_logger.debug("Entering free solvent removal ...")
         # creates a copy of the initial molecule
         # cleans the molecule from free solvents
         (
@@ -124,6 +134,7 @@ def worker(file: str, queue: Queue) -> dict[str, list | int | str] | None:
 
         # if the user wants to keep bound solvent skipping further steps
         if not keep_bound:
+            worker_logger.debug("Entering bound solvent removal ...")
             # identifying the oxo molecules
             oxo_mols, solvent_stats_batch2 = get_oxo(uniquesites, file, keep_oxo)
 
@@ -135,12 +146,9 @@ def worker(file: str, queue: Queue) -> dict[str, list | int | str] | None:
                 molecule_no_metals, rAON_atomlabels
             )
 
-            # rewriting binding sites as labels
-            binding_sites_labels = [site.label for site in binding_sites]
-
             # check the possible solvents
             solvent_mols_checked, solvent_stats_batch4 = check_solvent(
-                solvent_mols, binding_sites_labels, uniquesites
+                solvent_mols, binding_pairs, uniquesites, args.removable_denticity
             )
 
             # combine all the lists of items to remove
@@ -167,6 +175,7 @@ def worker(file: str, queue: Queue) -> dict[str, list | int | str] | None:
         if len(solvents_to_remove) > 0:
             solvent_present_flag = True
 
+        worker_logger.debug("Generating output cif ...")
         # getting the coordinates of the atoms for removal
         solvent_coordinates = get_coordinates(mol, solvents_to_remove)
 
@@ -178,6 +187,7 @@ def worker(file: str, queue: Queue) -> dict[str, list | int | str] | None:
         else:
             removed_atoms = 0
 
+        worker_logger.debug("Generating output csv ...")
         # output a csv with solvent removal stats
         output_row = output_csv(
             output_solvent_stats,
