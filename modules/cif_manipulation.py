@@ -4,6 +4,10 @@ import ccdc
 from ccdc import io
 from ccdc.crystal import Crystal
 
+from multiprocessing import current_process as cpr
+
+# from .log_utils import get_logger
+
 
 def readentry(input_cif: str) -> Crystal:
     """
@@ -17,7 +21,6 @@ def readentry(input_cif: str) -> Crystal:
         newcif (ccdc.crystal.Crystal): Crystal object containing structural data
                                        in the standard atom labeling convention.
     """
-
     # read in the cif to a crystal object
     with io.CrystalReader(input_cif, format="cif") as readcif:
         cif = readcif[0]

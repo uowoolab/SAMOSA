@@ -5,6 +5,10 @@ import os
 from ccdc.molecule import Molecule, Atom
 from ccdc.io import EntryReader
 
+from multiprocessing import current_process as cpr
+
+from .log_utils import get_logger
+
 
 def get_rAON_atomlabels(rAON_old: dict[Atom, float]) -> dict[str, float]:
     """
@@ -56,7 +60,6 @@ def remove_free_solvent(
                                                          output csv.
     """
     structure = molecule.copy()
-
     # setting the variables for collecting statistics
     free_solvents = []
     counterions = []
@@ -268,9 +271,13 @@ def check_entry(file: str) -> bool | str:
                     entry_oxo = True
     except:
         # if can't access entry removes all oxo
-        print(
-            "WARNING: refcode is not found in CCDC - all oxygen atoms suspected of being water will be removed if --keep_oxo was not passed as argument. This can be caused by inconsistent filename (refcode is extracted from filename) or absence of your MOF in CCDC. Rename your file to AAAAAA.cif or AAAAAA_xxx.cif and try again."
+        get_logger(cpr().name).warning(
+            "refcode %s not found in CCDC. All terminal-O will be removed if --keep_oxo is not specified. Check your cif file naming."
+            % ref_code
         )
+        # print(
+        #     "WARNING: refcode is not found in CCDC - all oxygen atoms suspected of being water will be removed if --keep_oxo was not passed as argument. This can be caused by inconsistent filename (refcode is extracted from filename) or absence of your MOF in CCDC. Rename your file to AAAAAA.cif or AAAAAA_xxx.cif and try again."
+        # )
         entry_oxo = "FAILED REFCODE"
 
     return entry_oxo

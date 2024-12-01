@@ -3,14 +3,19 @@ from __future__ import annotations
 
 import argparse
 import os
+import logging
 import time
 
-from multiprocessing import Pool
+# from itertools import repeat
+from multiprocessing import Manager, Queue, Pool, current_process
 
 from modules.assign_charges import *
 from modules.cif_manipulation import *
 from modules.outputs import *
 from modules.solvent_analysis import *
+
+from modules.log_utils import main_logging_setup, child_logging_setup
+
 
 code_desc = """
 Structural Activation via Metal Oxidation State Analysis.
@@ -34,7 +39,10 @@ parser.add_argument(
     "--n_processes", default=4, help="specify number of parallel processes"
 )
 parser.add_argument(
-    "-v", "--verbose", action="store_true", help="if set, turns off outputs"
+    "-v",
+    "--verbose",
+    action="store_true",
+    help="if set, turns on command line outputs and optional log messages",
 )
 parser.add_argument(
     "--keep_bound", action="store_true", help="if set, bound solvent is not removed"
@@ -42,15 +50,22 @@ parser.add_argument(
 parser.add_argument(
     "--keep_oxo", action="store_true", help="if set, terminal oxygens are not removed"
 )
+parser.add_argument(
+    "--logging",
+    default="INFO",
+    choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+    help="Set the logging level (default: INFO).",
+)
 args = parser.parse_args()
 
-cwd = args.files_path
+f_path = args.files_path
 output_dir = args.export_path
 keep_bound = args.keep_bound
 keep_oxo = args.keep_oxo
+log_type = getattr(logging, args.logging, logging.DEBUG)
 
 
-def worker(file: str) -> dict[str, list | int | str] | None:
+def worker(file: str, queue: Queue) -> dict[str, list | int | str] | None:
     """
     Handles the overall SAMOSA workflow including reading in the structure,
     identify and removing solvent molecules, and outputting the final structure
@@ -59,14 +74,16 @@ def worker(file: str) -> dict[str, list | int | str] | None:
 
     Parameters:
         file (str): filename in format "*.cif".
+        queue (multiprocessing.Queue): shared queue for child processes logging.
 
      Returns:
         output_row (dict[str, list | int | str]): collects statistics for
                                                   output csv.
     """
+    worker_logger = child_logging_setup(queue, current_process().name, log_type)
     try:
         start_time_MOF = time.time()
-        print(f"Analyzing {file}...")
+        worker_logger.info("analyzing %s ..." % os.path.basename(file))
         input_cif = file
 
         # read in the .cif, extract the underlying molecule,
@@ -86,7 +103,7 @@ def worker(file: str) -> dict[str, list | int | str] | None:
         dVBO = delocalisedLBO(mol)
         # then need ring bond contributions - NEW TO dev_194
         rVBO = ringVBOs(mol)
-        # finally combine delocal/aromatic bond conrtibutions with localized bonding
+        # finally combine delocal/aromatic bond contributions with localized bonding
         AON = iVBS_Oxidation_Contrib(uniquesites, rVBO, dVBO)
         # Previous only assigns an oxidation contribution to unique images of atoms,
         # also need to assign these values to redundant sites:
@@ -157,7 +174,7 @@ def worker(file: str) -> dict[str, list | int | str] | None:
 
         # removing solvent from cif file if solvent is present
         if solvent_present_flag:
-            removed_atoms = output_cif(output_dir, file, solvent_coordinates, cwd)
+            removed_atoms = output_cif(output_dir, file, solvent_coordinates, f_path)
         else:
             removed_atoms = 0
 
@@ -171,31 +188,52 @@ def worker(file: str) -> dict[str, list | int | str] | None:
             keep_bound,
         )
 
-        if not args.verbose:
+        if args.verbose:
             command_line_output(output_solvent_stats, solvent_present_flag, keep_bound)
 
-        print("--- %s seconds ---" % (time.time() - start_time_MOF))
-
+        worker_logger.info(
+            "%s / summary > %s"
+            % (os.path.basename(file), ",".join([str(j) for j in output_row]))
+        )
+        worker_logger.info(
+            "%s finished in %s seconds"
+            % (os.path.basename(file), (time.time() - start_time_MOF))
+        )
         return output_row
 
     except Exception as e:
-        print(f"ERROR >>>>> {file}")
+        worker_logger.error("%s failed" % file)
+
+
+def main():
+    start_time = time.time()
+    # init manager to handle process logging queue
+    with Manager() as manager:
+        log_q = manager.Queue()
+        root_logger, listener = main_logging_setup(log_q, log_type)
+        # search for structure files
+        files = [
+            os.path.join(f_path, file)
+            for file in os.listdir(f_path)
+            if file.endswith(".cif")
+        ]
+        root_logger.info("Selected logging level: logging.%s" % (args.logging))
+        root_logger.info("%s cif files detected in %s" % (len(files), f_path))
+        # init multiprocessing pool
+        with Pool(processes=int(args.n_processes)) as pool:
+            # f_args = [(f, log_q) for f in files]
+            for res in pool.starmap(worker, [(f, log_q) for f in files]):
+                if res is not None:
+                    export_res(res, keep_bound, output_dir)
+        # cleanup
+        root_logger.info(
+            "SAMOSA finished running in %s seconds" % (time.time() - start_time)
+        )
+        # end queue and listener
+        log_q.put_nowait(None)
+        listener.stop()
 
 
 if __name__ == "__main__":
-    start_time = time.time()
-
-    files = [
-        os.path.join(cwd, file) for file in os.listdir(cwd) if file.endswith(".cif")
-    ]
-
-    print(f"### {len(files)} .cif file(s) detected in {cwd} ###")
-
-    pool = Pool(processes=int(args.n_processes))
-
-    for res in pool.imap(worker, files):
-        if res is not None:
-            export_res(res, keep_bound, output_dir)
-
-    print("--- %s seconds ---" % (time.time() - start_time))
+    main()
 

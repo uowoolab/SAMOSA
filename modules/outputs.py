@@ -4,7 +4,11 @@ import os
 import csv
 import shutil
 
+from multiprocessing import current_process as cpr
+
 from .cif_manipulation import remove_solvents_from_file
+
+# from .log_utils import get_logger
 
 
 def command_line_output(

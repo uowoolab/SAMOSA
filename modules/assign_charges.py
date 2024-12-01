@@ -10,6 +10,10 @@ import mendeleev
 from ccdc.molecule import Atom, Molecule
 from ccdc.descriptors import MolecularDescriptors
 
+from multiprocessing import current_process as cpr
+
+from .log_utils import get_logger
+
 
 def get_unique_sites(mole: Molecule, asymmole: Molecule) -> list[Atom]:
     """
@@ -186,7 +190,7 @@ def ringVBOs(mole: Molecule) -> dict[int, int]:
                 offVBO += offdVBO[offatom]
             elif bond.bond_type == "Aromatic":
                 offVBO += 0
-                print("impossible Aromatic bond")
+                # print("impossible Aromatic bond")
         # cap with appropriate element for VBO
         if offVBO == 1:
             offatom.atomic_symbol = "H"
@@ -233,7 +237,10 @@ def ringVBOs(mole: Molecule) -> dict[int, int]:
                         rVBO += rdVBO[ratom]
                     elif rbond.bond_type == "Aromatic":
                         rVBO += 0
-                        print("impossible Aromatic bond")
+                        # print("impossible Aromatic bond")
+                        get_logger(cpr().name).warning(
+                            "impossible aromatic bond detected"
+                        )
                 # the VBOs are currently associated to atom objects
                 # in molecule objects that we have modified
                 # we need these to be associated to atom objects in
@@ -409,10 +416,14 @@ def valence_e(atom: Atom) -> int:
         elif elmnt.atomic_number in range(88, 104):
             valence = elmnt.atomic_number - 89 + 3
         else:
+            get_logger(cpr().name).error("unexpected f block element")
             raise ValueError("valence_e() >> Unexpected f block element", elmnt)
     elif elmnt.group_id == 18:
         valence = 8 if elmnt.symbol != "He" else 2
     else:
+        get_logger(cpr().name).error(
+            "unexpected element in valence electron calculations"
+        )
         raise ValueError("valence_e() >> Unexpected valence electrons", elmnt)
     return valence
 
