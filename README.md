@@ -4,33 +4,38 @@ Structural Activation via Metal Oxidation State Analysis. A solvent removal prot
 This program was designed to clean CIF files of Metal-Organic Frameworks (MOFs) from free solvents, counterions and bound solvents keeping into account the charge of removed fragments.
 
 ## Installation
-This code requires CSD Python API ([https://www.ccdc.cam.ac.uk/solutions/csd-core/components/csd-python-api/](https://www.ccdc.cam.ac.uk/solutions/csd-core/components/csd-python-api/)). You can install it from the source.
+This code requires [CSD Python API](https://www.ccdc.cam.ac.uk/solutions/csd-core/components/csd-python-api/), which must be installed separately according to their [installation instructions](https://downloads.ccdc.cam.ac.uk/documentation/API/installation_notes.html).
 
-Other dependencies:
+Additional dependencies:
  - mendeleev
 
-## File requirements
-Program was designed to work with CIF files.
+## Input file requirements
+Program was designed to work with experimental crystal structures in the CIF file format. 
+The following additional suggestions regarding the input structural data improve the success of the solvent removal algorithm:
+ - **Filename in format REFCODE.cif or REFCODE_xxx.cif** (the script accesses CSD to determine presence of terminal oxygens). With invalid refcode, certain aspects of the materials-specific criteria are impossible thus all terminal oxygens will be removed.
+ - **P1 symmetry** (Convert your experimental crystal structures to 'P1' using Materials Studio or using the following [code](https://github.com/uowoolab/CSD-cleaner) prior to use of SAMOSA)
+ - **Periodic structure** (Presence of bonds crossing the periodic boundaries is assumed in this method)
 
- - **Filename in format REFCODE.cif or REFCODE_xxx.cif** (the script accesses CSD to determine presence of terminal oxygens). With invalid refcode all terminal oxygens will be removed.
- - **P1 symmetry** (You can convert your MOFs using Materials Studio or get them in P1 from CSD using this code https://github.com/uowoolab/CSD-cleaner - 100% compatible)
- - **MOF is considered a periodic structure**
+## Example — running SAMOSA
 
-## Running the code
 ```
-cd <path_to_folder>
-python main.py --data_path <path to the folder with MOFs> --export_path <path to the export folder>
+cd <path to SAMOSA folder>
+python main.py --data_path <path to folder containing crystal structures> --export_path <path to folder to write processed crystal structures>
 ```
 
+## Optional arguments
 
-## Solvent removal options - arguments
+| Argument | Description | Default |
+| -------------- | -------------- | -------------- |
+| `--files_path` | Provide the path to the folder with input MOFs | cwd |
+| `--export_path` | Provide path to the output folder | cwd |
+| `--n_processes` | Specify number of processes for parallelization | 4 |
+| `--removable_denticity` | Specify the maximum ligand denticity that may be removed | monodentate (1) |
+| `--verbose`,`-v` | Enable command line output | - |
+| `--keep_bound` | Enable to retain bound solvent molecules | - |
+| `--keep_oxo` | Enable to retain all terminal oxygens | - |
+| `--logging` | Specify the desired level of logging | INFO |
 
- - `--data_path` Provide the path to the folder with input MOFs
- - `--export_path` Provide path to the output folder
- - `--n_processes` Specify number of processes for parallelization
- - `-v`, `--verbose` Pass to mute command line output
- - `--keep_bound` Keeps the bound solvent in the MOF
- - `--keep_oxo` Keeps all the terminal oxygens
 ## Outputs
 **MOFs_removed_solvent folder** contains all the edited structures that had solvent removed
 
@@ -47,7 +52,7 @@ If --keep_bound - **Free_solvent_removal_results.csv** - description of columns:
  - **Atoms_removed** - total atoms removed from CIF by the parcer
  - **atoms_match_flag** - TRUE if the cif parcer left out any atoms -> Total atoms and Atoms removed don't match
  - **Metal_counterion_flag** - TRUE if identified counterion that contains metals -> higher chance of wrong charge assignment
- - **Huge_counterion_flag** - TRUE if there are structures with counterions with a lof of metals and high mass that the code fails to assign charges to
+ - **Huge_counterion_flag** - TRUE if there are structures with counterions with a lot of metals and high mass that the code fails to assign charges to
 
 If all solvent should be removed - **Solvent_removal_results.csv** - additional columns:
 
@@ -60,3 +65,14 @@ If all solvent should be removed - **Solvent_removal_results.csv** - additional 
  - **OH_removed** - the code removes OH bound to the metals because statistically they are most often water with missing hydrogens.
 If it does so, it flags the molecule so you can check If it is actually OH or water with missing H
  - **Oxo_OH** - identifies terminal oxo atoms that likely can be OH or water on the atoms that can have those issues (U and Zr)
+
+**samosa.log** contains all the log messages for the parent and child processes.
+
+## Licensing
+The [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html) applies to the utilization of the SAMOSA solvent removal code. Follow the license guidelines regarding the use, sharing, adaptation, and attribution of this data.
+
+## Citation
+A preprint version of the manuscript describing the development of the SAMOSA method is available at the following citation. This section will be updated upon publication.
+
+(1) Gibaldi, M., Kapeliukha, A., White, A. & Woo, T. Incorporation of ligand charge and metal oxidation state considerations into the computational solvent removal and activation of experimental crystal structures preceding molecular simulation. ChemRxiv (2024). doi:10.26434/chemrxiv-2024-7vq41  This content is a preprint and has not been peer-reviewed.
+
