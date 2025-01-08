@@ -1,4 +1,13 @@
 # SAMOSA
+
+[![DOI](https://flat.badgen.net/static/DOI/10.1021%2Facs.jcim.4c01897/blue/)](https://doi.org/10.1021/acs.jcim.4c01897)
+![Python](https://flat.badgen.net/static/Python/3.9%20|%203.11/green/)
+[![Formatter](https://flat.badgen.net/static/Code%20Format/black/black)](https://black.readthedocs.io/en/stable/)
+
+<p align="center">
+    <img src="logo.png" alt="samosa" width="500">
+</p>
+
 Structural Activation via Metal Oxidation State Analysis. A solvent removal protocol generating activated crystal structures from experimental crystallographic information.
 
 This program was designed to clean CIF files of Metal-Organic Frameworks (MOFs) from free solvents, counterions and bound solvents keeping into account the charge of removed fragments.
@@ -10,7 +19,7 @@ Additional dependencies:
  - mendeleev
 
 ## Input file requirements
-Program was designed to work with experimental crystal structures in the CIF file format. 
+Program was designed to work with experimental crystal structures in the CIF file format.
 The following additional suggestions regarding the input structural data improve the success of the solvent removal algorithm:
  - **Filename in format REFCODE.cif or REFCODE_xxx.cif** (the script accesses CSD to determine presence of terminal oxygens). With invalid refcode, certain aspects of the materials-specific criteria are impossible thus all terminal oxygens will be removed.
  - **P1 symmetry** (Convert your experimental crystal structures to 'P1' using Materials Studio or using the following [code](https://github.com/uowoolab/CSD-cleaner) prior to use of SAMOSA)
@@ -72,7 +81,7 @@ If it does so, it flags the molecule so you can check If it is actually OH or wa
 The [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html) applies to the utilization of the SAMOSA solvent removal code. Follow the license guidelines regarding the use, sharing, adaptation, and attribution of this data.
 
 ## Citation
-A preprint version of the manuscript describing the development of the SAMOSA method is available at the following citation. This section will be updated upon publication.
+When using SAMOSA, please cite the following publication:
 
-(1) Gibaldi, M., Kapeliukha, A., White, A. & Woo, T. Incorporation of ligand charge and metal oxidation state considerations into the computational solvent removal and activation of experimental crystal structures preceding molecular simulation. ChemRxiv (2024). doi:10.26434/chemrxiv-2024-7vq41  This content is a preprint and has not been peer-reviewed.
+- Gibaldi, M., Kapeliukha, A., White, A. & Woo, T. Incorporation of ligand charge and metal oxidation state considerations into the computational solvent removal and activation of experimental crystal structures preceding molecular simulation. J. Chem. Inf. Model. (2024). [doi:10.1021/acs.jcim.4c01897](https://doi.org/10.1021/acs.jcim.4c01897)
 
