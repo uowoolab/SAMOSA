@@ -29,7 +29,7 @@ The following additional suggestions regarding the input structural data improve
 
 ```
 cd <path to SAMOSA folder>
-python main.py --data_path <path to folder containing crystal structures> --export_path <path to folder to write processed crystal structures>
+python main.py --files_path <path to folder containing crystal structures> --export_path <path to folder to write processed crystal structures>
 ```
 
 ## Optional arguments
